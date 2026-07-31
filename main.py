@@ -1,10 +1,7 @@
 import pathlib as pl
 import tkinter as tk
-import tkinter.filedialog as fd
-
-selected_folder = pl.Path.home() / "Downloads"
-status = " "
-state = 0
+from tkinter import filedialog as fd
+from tkinter import messagebox
 
 CATEGORIES = {
     "Images": [".png", ".jpg", ".jpeg", ".gif"],
@@ -13,69 +10,124 @@ CATEGORIES = {
     "Archives": [".zip", ".rar", ".7z"],
     "Audio": [".mp3", ".wav"],
     "Videos": [".mp4"],
-    "Applications": [".exe"]
+    "Applications": [".exe"],
 }
 
 
-def browser_folder():
-    global selected_folder
-    global status
-    path = fd.askdirectory()
-    if path:
-        selected_folder = pl.Path(path)
-        status = "Directory Selected"
-        directory_status.config(text=status)
-        directory_path.config(text=path)
+class DirectorySorterApp(tk.Tk):
+
+    def __init__(self):
+        super().__init__()
+
+        self.title("Directory Sorter")
+        self.geometry("600x250")
+        self.resizable(False, False)
+
+        # Reactive Tkinter Variables
+        self.folder_var = tk.StringVar(value=str(pl.Path.home() / "Downloads"))
+        self.status_var = tk.StringVar()
+
+        self._validate_initial_path()
+        self._build_ui()
+
+    def _validate_initial_path(self):
+        initial_path = pl.Path(self.folder_var.get())
+        if initial_path.exists():
+            self.status_var.set("Ready to sort")
+        else:
+            self.status_var.set("Default directory not found")
+
+    def _build_ui(self):
+        # Configure Grid Layout
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
+        # Main Container
+        container = tk.Frame(self, padx=20, pady=20)
+        container.grid(row=0, column=0, sticky="nsew")
+        container.columnconfigure(0, weight=1)
+
+        # Selection Group Box
+        selection_frame = tk.LabelFrame(
+            container, text=" Selected Directory ", padx=10, pady=10
+        )
+        selection_frame.grid(row=0, column=0, sticky="ew", pady=(0, 15))
+        selection_frame.columnconfigure(0, weight=1)
+
+        path_entry = tk.Entry(
+            selection_frame, textvariable=self.folder_var, state="readonly"
+        )
+        path_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+
+        browse_btn = tk.Button(
+            selection_frame, text="Browse...", command=self.browse_folder
+        )
+        browse_btn.grid(row=0, column=1)
+
+        # Action & Status Area
+        action_frame = tk.Frame(container)
+        action_frame.grid(row=1, column=0, sticky="ew")
+        action_frame.columnconfigure(0, weight=1)
+
+        sort_btn = tk.Button(
+            action_frame,
+            text="Sort Directory",
+            command=self.sort_folder,
+            bg="#007acc",
+            fg="white",
+            font=("TkDefaultFont", 10, "bold"),
+            pady=5,
+        )
+        sort_btn.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+
+        status_label = tk.Label(
+            action_frame,
+            textvariable=self.status_var,
+            fg="#555555",
+            anchor="w",
+        )
+        status_label.grid(row=1, column=0, sticky="w")
+
+    def browse_folder(self):
+        path = fd.askdirectory()
+        if path:
+            self.folder_var.set(path)
+            self.status_var.set("Directory selected")
+
+    def sort_folder(self):
+        folder_path = pl.Path(self.folder_var.get())
+
+        if not folder_path.exists():
+            self.status_var.set("Invalid directory path")
+            return
+
+        moved_count = 0
+        try:
+            for file in folder_path.iterdir():
+                if file.is_file():
+                    file_ext = file.suffix.lower()
+                    target_category = "Others"
+
+                    for category, extensions in CATEGORIES.items():
+                        if file_ext in extensions:
+                            target_category = category
+                            break
+
+                    target_dir = folder_path / target_category
+                    target_dir.mkdir(exist_ok=True)
+                    file.rename(target_dir / file.name)
+                    moved_count += 1
+
+            self.status_var.set(
+                f"Complete! Sorted {moved_count} file(s)."
+            )
+            messagebox.showinfo("Success", f"Sorted {moved_count} files.")
+
+        except Exception as e:
+            self.status_var.set("Error during sorting process")
+            messagebox.showerror("Error", f"Failed to sort files: {e}")
 
 
-def check_path(path):
-    global status
-    if pl.Path(path).exists():
-        status = "Good to go"
-    else:
-        status = "Invalid path"
-
-
-check_path(selected_folder)
-
-root = tk.Tk()
-root.title("Directory Sorter")
-root.geometry("700x400")
-
-folder_button = tk.Button(root, text="Browse Folder", command=browser_folder)
-folder_button.pack()
-
-sort_button = tk.Button(
-    root, text="Sort Folder", command=lambda: sort_folder(selected_folder)
-)
-sort_button.pack()
-
-directory_path = tk.Label(root, text=str(selected_folder))
-directory_path.pack()
-
-directory_status = tk.Label(root, text=status)
-directory_status.pack()
-
-def sort_folder(folder):
-    if pl.Path(folder).exists():
-        for file in pl.Path(folder).iterdir():
-            if file.is_file():
-                file_extension = file.suffix.lower()
-                category_found = False
-
-                for category_name, extensions in CATEGORIES.items():
-                    if file_extension in extensions:
-                        target_dir = folder / category_name
-                        target_dir.mkdir(exist_ok=True)
-                        file.rename(target_dir / file.name)
-                        category_found = True
-                        break
-
-                if not category_found:
-                    others_dir = folder / "Others"
-                    others_dir.mkdir(exist_ok=True)
-                    file.rename(others_dir / file.name)
-
-        directory_status.config(text="Sorting Complete!")
-
-root.mainloop()
+if __name__ == "__main__":
+    app = DirectorySorterApp()
+    app.mainloop()
